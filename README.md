@@ -8,11 +8,13 @@ records, 38,007 students) and the boundary GeoPackages in the `Dashboard Files` 
 
 | Layer | Choice |
 |---|---|
-| Database | PostgreSQL 16 + **PostGIS 3.4** |
-| API | FastAPI + psycopg 3 (no ORM — the work here is SQL) |
-| Tiles | `ST_AsMVT` vector tiles served by the API |
-| Frontend | React 19 + Vite 8 + **Tailwind 4 (CSS-first)** + MapLibre GL 6 + TanStack Query |
-| Tests | 56 backend (pytest, against a real PostGIS), 31 frontend (vitest) |
+| Database | **Supabase** — PostgreSQL + **PostGIS**, schema in `supabase/migrations/` |
+| API | Postgres functions called through Supabase (no server of our own — the work here is SQL) |
+| Tiles | `ST_AsMVT` vector tiles from the `tile` function |
+| Uploads | Supabase Edge Function `ingest`, behind Supabase Auth email sign-in |
+| Loader | Python + psycopg 3 (`backend/`), run from a PC for boundaries and big CSVs |
+| Frontend | React 19 + Vite 8 + **Tailwind 4 (CSS-first)** + MapLibre GL 6 + TanStack Query + supabase-js |
+| Tests | pytest against a real PostGIS (`backend/`), Vitest (`frontend/`, including the Edge Function) |
 
 **Read [`docs/DATA-AUDIT.md`](docs/DATA-AUDIT.md) first.** The counts in the source
 GeoPackages are inflated by a join on municipality name alone; this application
@@ -27,33 +29,37 @@ Everything in the API and the UI is one of:
 
 A student enrolled in three terms is **one** headcount and **three** records. The source
 data conflated these, which is how a 38,007-student dataset came to report 42,890
-"enrollees". Both are always on screen; `?metric=headcount|records` selects which one the
-map colours by.
+"enrollees". Both are always on screen; the `metric` filter (`headcount` or `records`)
+selects which one the map colours by.
 
 ## Quick start
 
-### 1. Database
+### 1. Database (Supabase)
+
+Create a Supabase project, then apply the schema — tables, PostGIS, row-level security
+and the API functions — with the Supabase CLI:
 
 ```bash
-createdb uc_enrollment
-psql uc_enrollment -c "CREATE EXTENSION postgis;"
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+npx supabase db push
 ```
 
-Any PostGIS 3.x will do — local, Neon, Supabase, or a Railway Postgres with the extension
-enabled.
+(Or paste each file in `supabase/migrations/`, in order, into the SQL Editor.) Every
+migration is idempotent.
 
-### 2. Backend
+### 2. Loader
 
 ```bash
 cd backend
 python -m venv .venv && . .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -e .
-cp .env.example .env                              # then edit DATABASE_URL
-uvicorn app.main:app --reload --port 8000
+cp .env.example .env                              # then set DATABASE_URL
 ```
 
-The schema is applied automatically by the loader and is idempotent — run it as often as
-you like.
+`DATABASE_URL` is Supabase's **Session pooler** connection string (Connect → Session
+pooler) with `?sslmode=require`. The loader applies the migrations itself too, so it also
+works against a plain local PostGIS.
 
 ### 3. Load the data
 
@@ -95,74 +101,88 @@ straight to PostGIS. (`ogr2ogr -f PostgreSQL` works too if you prefer it.)
 
 ```bash
 cd frontend
+cp .env.example .env     # VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
 npm install
-npm run dev          # http://localhost:5173, proxies /api to :8000
+npm run dev              # http://localhost:5173, talking to your Supabase project
 ```
 
-Production build: `npm run build`, with `VITE_API_URL` set to the deployed API's origin
-if it differs from the site's.
+Both variables are read at **build** time.
 
-## API
+## Data API
 
-All read endpoints accept the same filters, repeated for multiple values:
+The browser calls Postgres functions through Supabase (`/rest/v1/rpc/<name>`). Each read
+function takes the filters as one JSON argument `f`, e.g.
+`{"college": ["COE"], "school_year": [2025], "metric": "records"}`; recognised keys are
 `school_year`, `term`, `college`, `course`, `program_group`, `status`, `year_level`,
 `sex`, `nationality`, `region`, `province`, `country`, `metric`.
 
-| Endpoint | Purpose |
+| Function | Purpose |
 |---|---|
-| `GET /api/health` | status, PostGIS version, row counts |
-| `GET /api/filters` | every filter vocabulary, plus courses grouped by college |
-| `GET /api/summary` | totals, the school-year trend, and the standard breakdowns |
-| `GET /api/breakdown/{dimension}` | one ranked dimension, both metrics |
-| `GET /api/feeder-schools` | which schools send UC its students |
-| `GET /api/geo/{level}` | GeoJSON with the metric attached (municipality level requires `?province=`) |
-| `GET /api/tiles/{level}/{z}/{x}/{y}.pbf` | vector tiles — the national municipal view |
-| `GET /api/scale/{level}` | quantile class breaks for the legend |
-| `GET /api/geo/bbox/{level}?name=` | bounding box, for fly-to |
-| `POST /api/ingest/validate` | dry-run an upload (needs `X-API-Key`) |
-| `POST /api/ingest` | load an upload (needs `X-API-Key`) |
+| `health()` | status, PostGIS version, row counts |
+| `filter_options()` | every filter vocabulary, plus courses grouped by college |
+| `summary(f)` | totals, the school-year trend, and the standard breakdowns |
+| `breakdown(dimension, f, lim)` | one ranked dimension, both metrics |
+| `feeder_schools(f, lim)` | which schools send UC its students |
+| `geo(level, f, province)` | GeoJSON with the metric attached (municipality level needs a province) |
+| `tile(level, z, x, y, f)` | vector tile bytes — the national municipal view |
+| `scale(level, f, classes)` | quantile class breaks for the legend |
+| `bbox(level, name, province)` | bounding box, for fly-to |
+| `batches()` | load history |
 
-Interactive docs at `/docs` when the API is running.
+All of them return aggregates or geometry only. Every table has row-level security on
+with no policies, so the publishable key cannot read a single enrollment row directly;
+it can only call these functions. Uploads go to the `ingest` Edge Function instead
+(`POST /functions/v1/ingest`, `?dry_run=1` to validate without writing).
 
 ### Why tiles and not GeoJSON
 
 The source geometry is 678 MB for ~1,800 polygons. As vector tiles the browser receives
 1–9 KB per view and the metric travels inside the tile, so changing a filter recolours
 without a second geometry request. Country and provincial levels are small enough to also
-be served as simplified GeoJSON, which is what `/api/geo/{level}` is for.
+be served as simplified GeoJSON, which is what the `geo` function is for.
 
 ### Why there is no pre-aggregated cube
 
 Headcount is a distinct count, which is not additive: no cube of per-cell counts can be
 summed back into a correct headcount for an arbitrary filter. So aggregates are computed
-live, and the composite indexes in `001_schema.sql` make the unfiltered municipal
+live, and the composite indexes in the schema migration make the unfiltered municipal
 choropleth land at ~150 ms on 158k rows; filtered views run in tens of milliseconds.
 
 ## Uploads
 
-**Upload data** in the header opens the load desk: drop a term's CSV, it dry-runs the file
-and reports how many rows will load, how many are refused and why, and only then offers
-the Load button. After a load it refreshes every figure on the page and keeps a history of
-every batch.
+**Upload data** in the header opens the load desk. Sign in with your email (Supabase
+sends a one-time link; there is no password), drop a term's CSV, and the file is checked
+straight away: how many rows will load, how many are refused and why. Only then is the
+Load button offered. After a load every figure on the page refreshes, and the panel keeps
+a history of every batch.
 
-It is guarded by `INGEST_API_KEY`: set it on the API and whoever uploads types the same
-key into the panel, where it is held in `sessionStorage` for that tab only. Left unset —
-the default — the endpoints return 503 and the panel says uploads are switched off.
+Only addresses on the upload list can load data. Add someone in the SQL Editor:
 
-Be clear-eyed about what that is: one shared key, not a personal login. The batch record
-keeps the file name and the time, not who uploaded it. Before this faces anyone outside
-the office, put it behind the university SSO.
+```sql
+INSERT INTO ingest_admin (email) VALUES ('someone@uc-bcf.edu.ph');
+```
+
+The batch record notes who uploaded it. Files over 20 MB (`MAX_UPLOAD_MB` on the Edge
+Function) are refused with a pointer to the command-line loader, which is also the only
+path that can load boundaries.
 
 ## Tests
 
 ```bash
-cd backend && pytest          # 56 tests, needs a reachable PostGIS
-cd frontend && npm test       # 31 tests
+cd backend && pytest          # needs a reachable PostGIS; creates its own database
+cd frontend && npm test       # UI, data layer, Edge Function handler, validator parity
 ```
 
-The backend suite creates and drops its own database (`TEST_DATABASE_URL`, default
-`uc_enrollment_test`) and runs against real PostGIS — the identity join, `ST_AsMVT` and
-the natural-key conflict are database behaviour, and mocking them would assert nothing.
+The backend suite runs the migrations against real PostGIS and calls the API functions
+directly — the identity join, `ST_AsMVT`, row-level security and the natural-key conflict
+are database behaviour, and mocking them would assert nothing. Point
+`TEST_DATABASE_URL`/`ADMIN_DATABASE_URL` at a scratch server; the test role needs
+`CREATEDB` and `CREATEROLE` (the migrations create Supabase's `anon`, `authenticated`
+and `service_role` roles when they are missing).
+
+The CSV validator exists twice — Python for the loader, TypeScript for the Edge
+Function — and both are tested against `supabase/functions/_shared/validate.cases.json`,
+which is generated from the Python one.
 
 Lint and typecheck: `ruff check app tests`, `npm run typecheck`.
 
@@ -176,6 +196,6 @@ Lint and typecheck: `ruff check app tests`, `npm run typecheck`.
   total. The loader lists them.
 - **Foreign cities have no polygon.** International students are mapped at country level
   only; `MUNICITY` values such as "Riyadh" have nowhere to land below that.
-- **No authentication on the read API.** It exposes aggregates, not records, but it
-  should sit behind the university's SSO or an allowlist before it faces the public
-  internet. See `docs/DEPLOYMENT.md`.
+- **No sign-in for reading.** Anyone with the site's URL can see the aggregates (never
+  individual records). Put the site behind the university's SSO or an allowlist before
+  it faces the public internet. See `docs/DEPLOYMENT.md`.

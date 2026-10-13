@@ -1,0 +1,512 @@
+{
+  "rows": [
+    {
+      "name": "valid row, whitespace collapsed, sensitive fields dropped",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "row": {
+          "student_ref": "1001",
+          "sex": "F",
+          "broad_religion": null,
+          "civil_status": null,
+          "college": "CITCS",
+          "course": "BS IT",
+          "year_level": 1,
+          "year_of_entry": 2024,
+          "term_of_entry": 1,
+          "nationality": "Filipino",
+          "status": "New",
+          "school_year": 2025,
+          "term": 1,
+          "program_group": "Undergraduate",
+          "municity": "Baguio City",
+          "province": "Benguet",
+          "region": "Cordillera Administrative Region (CAR)",
+          "country": "Philippines",
+          "prev_school": "Baguio City High School"
+        }
+      }
+    },
+    {
+      "name": "sensitive fields kept when asked",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": true,
+      "expect": {
+        "row": {
+          "student_ref": "1001",
+          "sex": "F",
+          "broad_religion": "Christianity",
+          "civil_status": "Single",
+          "college": "CITCS",
+          "course": "BS IT",
+          "year_level": 1,
+          "year_of_entry": 2024,
+          "term_of_entry": 1,
+          "nationality": "Filipino",
+          "status": "New",
+          "school_year": 2025,
+          "term": 1,
+          "program_group": "Undergraduate",
+          "municity": "Baguio City",
+          "province": "Benguet",
+          "region": "Cordillera Administrative Region (CAR)",
+          "country": "Philippines",
+          "prev_school": "Baguio City High School"
+        }
+      }
+    },
+    {
+      "name": "placeholders become null",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "N/A",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "-",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "  NULL ",
+        "STATUS": "none",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "row": {
+          "student_ref": "1001",
+          "sex": null,
+          "broad_religion": null,
+          "civil_status": null,
+          "college": null,
+          "course": "BS IT",
+          "year_level": 1,
+          "year_of_entry": 2024,
+          "term_of_entry": 1,
+          "nationality": null,
+          "status": null,
+          "school_year": 2025,
+          "term": 1,
+          "program_group": "Undergraduate",
+          "municity": "Baguio City",
+          "province": "Benguet",
+          "region": "Cordillera Administrative Region (CAR)",
+          "country": "Philippines",
+          "prev_school": "Baguio City High School"
+        }
+      }
+    },
+    {
+      "name": "decimal year level truncates",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "2.0",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "row": {
+          "student_ref": "1001",
+          "sex": "F",
+          "broad_religion": null,
+          "civil_status": null,
+          "college": "CITCS",
+          "course": "BS IT",
+          "year_level": 2,
+          "year_of_entry": 2024,
+          "term_of_entry": 1,
+          "nationality": "Filipino",
+          "status": "New",
+          "school_year": 2025,
+          "term": 1,
+          "program_group": "Undergraduate",
+          "municity": "Baguio City",
+          "province": "Benguet",
+          "region": "Cordillera Administrative Region (CAR)",
+          "country": "Philippines",
+          "prev_school": "Baguio City High School"
+        }
+      }
+    },
+    {
+      "name": "non-numeric term",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "first",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "reason": "TERM: 'first' is not a number"
+      }
+    },
+    {
+      "name": "quote in a non-numeric value",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "it's",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "reason": "YEAR_LEVEL: \"it's\" is not a number"
+      }
+    },
+    {
+      "name": "empty student ref",
+      "raw": {
+        "USER_INDEX": "  ",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "reason": "student_ref is empty"
+      }
+    },
+    {
+      "name": "empty course",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "na",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "reason": "course is empty"
+      }
+    },
+    {
+      "name": "school year out of range",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "1850",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "reason": "school_year 1850 out of range"
+      }
+    },
+    {
+      "name": "term out of range",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "1",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "7",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "reason": "term 7 out of range 1-4"
+      }
+    },
+    {
+      "name": "year level out of range",
+      "raw": {
+        "USER_INDEX": "1001",
+        "SEX": "F",
+        "RELIGION": "Roman Catholic",
+        "BROAD_RELIGION": "Christianity",
+        "CIVIL_STATUS": "Single",
+        "COLLEGE": "CITCS",
+        "COURSE": "BS IT",
+        "YEAR_LEVEL": "11",
+        "YEAR OF ENTRY": "2024",
+        "TERM OF ENTRY": "1",
+        "NATIONALITY": "Filipino",
+        "STATUS": "New",
+        "SCHOOL YEAR": "2025",
+        "TERM": "1",
+        "PROGRAM_GROUP": "Undergraduate",
+        "MUNICITY": "Baguio City",
+        "PROVINCE": "Benguet",
+        "REGION": "Cordillera  Administrative Region\t (CAR)",
+        "COUNTRY": "Philippines",
+        "PREV_SCHOOL CORRECTED": "Baguio City High School"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "reason": "year_level 11 out of range 1-10"
+      }
+    },
+    {
+      "name": "missing optional columns",
+      "raw": {
+        "USER_INDEX": "9",
+        "SCHOOL YEAR": "2025",
+        "TERM": "2",
+        "COURSE": "BS N"
+      },
+      "row_number": 5,
+      "include_sensitive": false,
+      "expect": {
+        "row": {
+          "student_ref": "9",
+          "sex": null,
+          "broad_religion": null,
+          "civil_status": null,
+          "college": null,
+          "course": "BS N",
+          "year_level": null,
+          "year_of_entry": null,
+          "term_of_entry": null,
+          "nationality": null,
+          "status": null,
+          "school_year": 2025,
+          "term": 2,
+          "program_group": null,
+          "municity": null,
+          "province": null,
+          "region": null,
+          "country": null,
+          "prev_school": null
+        }
+      }
+    }
+  ],
+  "headers": [
+    {
+      "name": "full header, RELIGION ignored",
+      "header": [
+        "USER_INDEX",
+        "SEX",
+        "RELIGION",
+        "BROAD_RELIGION",
+        "CIVIL_STATUS",
+        "COLLEGE",
+        "COURSE",
+        "YEAR_LEVEL",
+        "YEAR OF ENTRY",
+        "TERM OF ENTRY",
+        "NATIONALITY",
+        "STATUS",
+        "SCHOOL YEAR",
+        "TERM",
+        "PROGRAM_GROUP",
+        "MUNICITY",
+        "PROVINCE",
+        "REGION",
+        "COUNTRY",
+        "PREV_SCHOOL CORRECTED"
+      ],
+      "expect": {
+        "ignored": [
+          "RELIGION"
+        ]
+      }
+    },
+    {
+      "name": "BOM and spaces tolerated",
+      "header": [
+        "﻿USER_INDEX ",
+        "SCHOOL YEAR",
+        "TERM",
+        "COURSE",
+        "EXTRA"
+      ],
+      "expect": {
+        "ignored": [
+          "EXTRA"
+        ]
+      }
+    },
+    {
+      "name": "missing required",
+      "header": [
+        "USER_INDEX",
+        "TERM"
+      ],
+      "expect": {
+        "error": "missing required column(s): COURSE, SCHOOL YEAR"
+      }
+    },
+    {
+      "name": "no header",
+      "header": [],
+      "expect": {
+        "error": "file has no header row"
+      }
+    }
+  ]
+}

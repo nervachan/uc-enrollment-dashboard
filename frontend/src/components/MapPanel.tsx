@@ -16,7 +16,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 setWorkerUrl(workerUrl);
 
-import { api, API_BASE, apiUrl, type Filters, type Scale } from "../lib/api";
+import { api, tileRequestHeaders, tileUrl, type Filters, type Scale } from "../lib/api";
 import { stepExpression, ZERO_DARK, ZERO_LIGHT } from "../lib/choropleth";
 import { formatNumber } from "../lib/format";
 import { Legend } from "./Legend";
@@ -72,6 +72,12 @@ export function MapPanel({ level, filters, scale, isDark, onDrillDown }: Props) 
       bounds: HOME_BOUNDS[level],
       fitBoundsOptions: { padding: 24 },
       attributionControl: false,
+      // Tiles come from the Supabase `tile` function, which needs the project key and
+      // must be asked for raw bytes. Every other request passes through untouched.
+      transformRequest: (url) => {
+        const headers = tileRequestHeaders(url);
+        return headers ? { url, headers } : undefined;
+      },
     });
     instance.addControl(new NavigationControl({ showCompass: false }), "top-right");
     instance.addControl(
@@ -96,16 +102,16 @@ export function MapPanel({ level, filters, scale, isDark, onDrillDown }: Props) 
     const instance = map.current;
     if (!instance || !ready || !scale) return;
 
-    const query = apiUrl(`/api/tiles/${level}/{z}/{x}/{y}.pbf`, filters);
-    const tileUrl = query.startsWith("http")
-      ? query
-      : `${window.location.origin}${API_BASE}${query.replace(API_BASE, "")}`;
-
     if (instance.getLayer(FILL_LAYER)) instance.removeLayer(FILL_LAYER);
     if (instance.getLayer(LINE_LAYER)) instance.removeLayer(LINE_LAYER);
     if (instance.getSource(SOURCE_ID)) instance.removeSource(SOURCE_ID);
 
-    instance.addSource(SOURCE_ID, { type: "vector", tiles: [tileUrl], minzoom: 0, maxzoom: 14 });
+    instance.addSource(SOURCE_ID, {
+      type: "vector",
+      tiles: [tileUrl(level, filters)],
+      minzoom: 0,
+      maxzoom: 14,
+    });
     instance.addLayer({
       id: FILL_LAYER,
       type: "fill",

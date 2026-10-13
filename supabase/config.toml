@@ -1,0 +1,9 @@
+# Supabase CLI settings for this repository (`supabase link`, `supabase db push`,
+# `supabase functions deploy`). Only the settings that differ from the CLI's defaults.
+
+project_id = "uc-enrollment-dashboard"
+
+[functions.ingest]
+# The function checks the caller's sign-in itself (handler.ts) so it can answer with a
+# message the upload panel can show, instead of the gateway's bare 401.
+verify_jwt = false
