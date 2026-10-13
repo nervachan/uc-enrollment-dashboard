@@ -1,0 +1,165 @@
+@import "tailwindcss";
+
+/* Tailwind v4 is configured in CSS. There is no tailwind.config.js, no PostCSS config
+   and no content globs — the @tailwindcss/vite plugin scans the project itself. */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  /* Chart chrome and ink (light). The dark steps are selected, not flipped. */
+  --color-surface: #fcfcfb;
+  --color-plane: #f9f9f7;
+  --color-ink: #0b0b0b;
+  --color-ink-2: #52514e;
+  --color-ink-muted: #898781;
+  --color-grid: #e1e0d9;
+  --color-axis: #c3c2b7;
+  --color-hairline: rgb(11 11 11 / 0.1);
+
+  /* Accents. Green carries ranked magnitude (bars, selected controls), blue carries
+     change over time (the trend line), and black is the ink. Each chart holds a single
+     series, so neither accent identifies an entity — nothing is lost if a reader cannot
+     separate them. Both clear 4.5:1 against white labels on the fill. */
+  --color-series-1: #0f7a52; /* green  — 5.21:1 on surface, 5.35:1 vs white label */
+  --color-series-2: #1b5f8c; /* blue   — 6.68:1 on surface, 6.86:1 vs white label */
+  --color-series-3: #11263f; /* near-black, the ramp's darkest step */
+
+  /* Sequential ramp — green through blue to near-black, monotone in lightness.
+     Mirrors src/lib/choropleth.ts; change both together. */
+  --color-seq-100: #e4f5ea;
+  --color-seq-200: #b4e3c8;
+  --color-seq-300: #74c79f;
+  --color-seq-400: #2fa58b;
+  --color-seq-500: #1d7a94;
+  --color-seq-600: #1b4f7a;
+  --color-seq-700: #11263f;
+}
+
+:root {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --map-control-filter: invert(1) brightness(1.6);
+    --color-surface: #1a1a19;
+    --color-plane: #0d0d0d;
+    --color-ink: #f0efec;
+    --color-ink-2: #c3c2b7;
+    --color-grid: #2c2c2a;
+    --color-axis: #383835;
+    --color-hairline: rgb(255 255 255 / 0.1);
+    --color-series-1: #2fae82; /* green — 6.22:1 on the dark surface */
+    --color-series-2: #4aa3d8; /* blue  — 6.24:1 on the dark surface */
+    --color-series-3: #a9daf6;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --map-control-filter: invert(1) brightness(1.6);
+  --color-surface: #1a1a19;
+  --color-plane: #0d0d0d;
+  --color-ink: #f0efec;
+  --color-ink-2: #c3c2b7;
+  --color-grid: #2c2c2a;
+  --color-axis: #383835;
+  --color-hairline: rgb(255 255 255 / 0.1);
+  --color-series-1: #2fae82;
+  --color-series-2: #4aa3d8;
+  --color-series-3: #a9daf6;
+}
+
+body {
+  background: var(--color-plane);
+  color: var(--color-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  margin: 0;
+}
+
+/* MapLibre's stylesheet is imported inside the lazily-loaded map chunk, so it lands
+   AFTER this file and wins any tie on specificity. Every rule below is deliberately two
+   classes deep for that reason — written with one, the popup renders white-on-white in
+   dark mode. */
+.uc-popup .maplibregl-popup-content {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-hairline);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
+}
+
+.uc-popup .maplibregl-popup-tip {
+  display: none;
+}
+
+/* MapLibre's own controls carry a hard-coded white background, which reads as a hole
+   punched in the dark theme. Same specificity problem, same two-class answer. */
+.uc-map .maplibregl-ctrl-group,
+.uc-map .maplibregl-ctrl-attrib,
+.uc-map .maplibregl-ctrl-attrib.maplibregl-compact,
+.uc-map .maplibregl-ctrl-attrib-button {
+  background: var(--color-surface);
+  color: var(--color-ink-2);
+  border: 1px solid var(--color-hairline);
+  box-shadow: none;
+}
+
+.uc-map .maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--color-hairline);
+}
+
+.uc-map .maplibregl-ctrl-group button span {
+  filter: var(--map-control-filter, none);
+}
+
+.uc-map .maplibregl-ctrl-attrib a {
+  color: var(--color-ink-2);
+}
+
+.uc-map .maplibregl-ctrl-attrib-button,
+.uc-map .maplibregl-ctrl-attrib.maplibregl-compact:after {
+  filter: var(--map-control-filter, none);
+}
+
+/* The readout must never take the pointer: if it does, the map sees the cursor leave
+   the layer, removes the popup, and the two fight each other once per frame. */
+.uc-popup,
+.uc-popup .maplibregl-popup-content {
+  pointer-events: none;
+}
+
+/* The hover readout. The number is the point of it, so it is set large and the place
+   name and the secondary measure sit around it. */
+.uc-popup .maplibregl-popup-content strong {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.uc-popup .uc-popup-figure {
+  display: block;
+  margin-top: 0.125rem;
+  font-size: 1.125rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--color-series-1);
+}
+
+.uc-popup .uc-popup-unit {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-ink-2);
+}
+
+.uc-popup .uc-popup-sub {
+  display: block;
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-muted);
+}
