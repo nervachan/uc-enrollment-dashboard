@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, ApiError, type IngestResult, type ValidationResult } from "../lib/api";
+import { sendSignInLink, signOut, useSession } from "../lib/auth";
 import { formatNumber } from "../lib/format";
 
 type Stage = "pick" | "checked" | "loaded";
-
-const KEY_STORAGE = "uc-ingest-key";
 
 /** A term's export is tens of megabytes; a two-row test file is not. Show both honestly. */
 function fileSize(bytes: number): string {
@@ -16,23 +15,21 @@ function fileSize(bytes: number): string {
 }
 
 /**
- * The upload desk: drop a term's CSV, see what the API makes of it, then commit.
+ * The upload desk: sign in with an emailed link, drop a term's CSV, see what the server
+ * makes of it, then commit.
  *
- * It always dry-runs first. The registrar's export is 158k rows and a bad column drops
- * silently if nobody looks, so the panel refuses to offer the Load button until it has
- * shown how many rows will be refused and why.
+ * Dropping a file checks it straight away (a dry run that writes nothing). The
+ * registrar's export is 158k rows and a bad column drops silently if nobody looks, so
+ * the panel refuses to offer the Load button until it has shown how many rows will be
+ * refused and why.
  */
 export function UploadPanel({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const queryClient = useQueryClient();
 
-  const [apiKey, setApiKey] = useState(() => {
-    try {
-      return sessionStorage.getItem(KEY_STORAGE) ?? "";
-    } catch {
-      return ""; // private browsing; the field simply starts empty each time
-    }
-  });
+  const { session, loading: sessionLoading } = useSession();
+  const [email, setEmail] = useState("");
+  const [linkSent, setLinkSent] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [stage, setStage] = useState<Stage>("pick");
   const [busy, setBusy] = useState(false);
@@ -53,29 +50,32 @@ export function UploadPanel({ onClose }: { onClose: () => void }) {
     setCheck(null);
     setResult(null);
     setError(null);
+    if (next && session) void run("check", next);
   }
 
-  function remember(key: string) {
-    setApiKey(key);
+  async function requestLink() {
+    setBusy(true);
+    setError(null);
     try {
-      // sessionStorage, not localStorage: the key dies with the tab rather than sitting
-      // on a shared office machine until someone clears it.
-      sessionStorage.setItem(KEY_STORAGE, key);
-    } catch {
-      /* nothing to do; the key still works for this page view */
+      await sendSignInLink(email);
+      setLinkSent(true);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
     }
   }
 
-  async function run(step: "check" | "load") {
-    if (!file) return;
+  async function run(step: "check" | "load", target: File | null = file) {
+    if (!target) return;
     setBusy(true);
     setError(null);
     try {
       if (step === "check") {
-        setCheck(await api.validateUpload(file, apiKey));
+        setCheck(await api.validateUpload(target));
         setStage("checked");
       } else {
-        const loaded = await api.ingestUpload(file, apiKey, "uploaded from the dashboard");
+        const loaded = await api.ingestUpload(target);
         setResult(loaded);
         setStage("loaded");
         // Every number on the page is now stale.
@@ -84,11 +84,9 @@ export function UploadPanel({ onClose }: { onClose: () => void }) {
     } catch (caught) {
       const message =
         caught instanceof ApiError
-          ? caught.status === 503
-            ? "Uploads are switched off: the API has no INGEST_API_KEY set."
-            : caught.status === 401
-              ? "That key was refused."
-              : caught.message
+          ? caught.status === 401
+            ? "Your sign-in has expired. Sign out and request a new link."
+            : caught.message
           : String(caught);
       setError(message);
     } finally {
@@ -114,21 +112,59 @@ export function UploadPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="space-y-4 px-5 py-4">
-        <label className="block">
-          <span className="text-xs font-medium text-[var(--color-ink-2)]">Upload key</span>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(event) => remember(event.target.value)}
-            placeholder="the API's INGEST_API_KEY"
-            aria-label="Upload key"
-            className="mt-1 w-full rounded-lg border border-[var(--color-hairline)] bg-[var(--color-surface)] px-2 py-1.5 text-sm"
-          />
-          <span className="mt-1 block text-[11px] text-[var(--color-ink-muted)]">
-            One shared key, not a personal login: the batch record keeps the file name and
-            time, not who uploaded it.
-          </span>
-        </label>
+        {sessionLoading ? null : session ? (
+          <p className="flex items-center justify-between text-xs text-[var(--color-ink-2)]">
+            <span>
+              Signed in as <strong>{session.user.email}</strong>. Uploads are recorded with
+              this address.
+            </span>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="rounded-lg px-2 py-1 hover:bg-[var(--color-grid)]"
+            >
+              Sign out
+            </button>
+          </p>
+        ) : linkSent ? (
+          <p role="status" className="rounded-lg border border-[var(--color-hairline)] px-3 py-2 text-sm">
+            Sign-in link sent to <strong>{email.trim()}</strong>. Open it on this computer, then
+            reopen this panel.
+          </p>
+        ) : (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void requestLink();
+            }}
+            className="block"
+          >
+            <label className="block">
+              <span className="text-xs font-medium text-[var(--color-ink-2)]">Your email</span>
+              <span className="mt-1 flex gap-2">
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@uc-bcf.edu.ph"
+                  aria-label="Your email"
+                  className="w-full rounded-lg border border-[var(--color-hairline)] bg-[var(--color-surface)] px-2 py-1.5 text-sm"
+                />
+                <button
+                  type="submit"
+                  disabled={busy || !email.trim()}
+                  className="shrink-0 rounded-lg border border-[var(--color-hairline)] px-3 py-1.5 text-xs disabled:opacity-40"
+                >
+                  Email me a sign-in link
+                </button>
+              </span>
+            </label>
+            <span className="mt-1 block text-[11px] text-[var(--color-ink-muted)]">
+              No password. Only addresses on the upload list can load data.
+            </span>
+          </form>
+        )}
 
         <div
           onDragOver={(event) => {
@@ -162,6 +198,7 @@ export function UploadPanel({ onClose }: { onClose: () => void }) {
             type="file"
             accept=".csv,text/csv"
             aria-label="Enrollment CSV"
+            disabled={!session}
             onChange={(event) => pick(event.target.files?.[0] ?? null)}
             className="mt-2 text-xs text-[var(--color-ink-2)] file:mr-2 file:rounded-lg file:border file:border-[var(--color-hairline)] file:bg-[var(--color-surface)] file:px-3 file:py-1 file:text-xs file:text-[var(--color-ink)]"
           />
@@ -223,7 +260,7 @@ export function UploadPanel({ onClose }: { onClose: () => void }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={!file || !apiKey || busy}
+            disabled={!file || !session || busy}
             onClick={() => run("check")}
             className="rounded-lg border border-[var(--color-hairline)] px-3 py-1.5 text-xs disabled:opacity-40"
           >

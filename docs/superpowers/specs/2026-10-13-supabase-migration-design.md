@@ -1,6 +1,6 @@
 # Supabase migration — design
 
-Date: 2026-10-13 · Status: awaiting review
+Date: 2026-10-13 · Status: approved and implemented
 
 ## Goal
 
@@ -18,9 +18,11 @@ same numbers.
 
 ### Assumptions (correct these if wrong)
 
-- The Edge Function keeps today's auth model: one shared key sent as `X-API-Key`,
-  stored as the `INGEST_API_KEY` function secret; unset means uploads return 503.
-  No per-user login.
+- remove ingestion api key functionality and change it to an easier ingest flow
+  → **Decision:** no shared key. Uploaders sign in with a Supabase Auth email link (no
+  password); only addresses in the `ingest_admin` table may load. Uploads are not left
+  open, because anyone with the URL could then write to the enrollment table. Choosing
+  a file checks it immediately; one click loads it.
 - The Python loader stays as the way to load boundaries and large CSVs from a PC. The
   678 MB of GeoPackages never leave the operator's machine.
 - `@supabase/ssr` is not needed (this is a client-only SPA, no server rendering) and is
@@ -32,7 +34,7 @@ same numbers.
 Browser (Vercel static site)
   ├─ supabase-js ──► PostgREST /rest/v1/rpc/*     read functions (publishable key)
   ├─ MapLibre ─────► PostgREST /rest/v1/rpc/tile  vector tiles, bytea
-  └─ Upload panel ─► Edge Function /functions/v1/ingest   (X-API-Key)
+  └─ Upload panel ─► Edge Function /functions/v1/ingest   (signed-in user JWT)
                          └─ service-role RPC ──► ingest_* functions
 PC: python -m app.etl ──► Postgres (session pooler DATABASE_URL)
 ```
@@ -111,9 +113,10 @@ The heaviest query today is ~400 ms, so this should hold; the migration sets
   `apikey` and `Accept` for Supabase tile requests only.
 - `App.tsx` — the "API unreachable" message names the Supabase variables instead of
   `VITE_API_URL`.
-- `UploadPanel.tsx` — posts to the Edge Function (`/functions/v1/ingest` and
-  `/functions/v1/ingest?dry_run=1`) with `X-API-Key`; responses keep today's shape, so
-  the panel's states and messages are unchanged.
+- `UploadPanel.tsx` — email sign-in link instead of the key field (`lib/auth.ts`);
+  choosing a file runs the dry run at once; posts to the Edge Function
+  (`/functions/v1/ingest`, `?dry_run=1`) with the user's access token. Responses keep
+  today's shape.
 - `vite.config.ts` — the `/api` proxy is removed.
 - `.env.example` — `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
 
@@ -121,8 +124,9 @@ The heaviest query today is ~400 ms, so this should hold; the migration sets
 
 Deno/TypeScript. Replaces `POST /api/ingest` and `POST /api/ingest/validate`.
 
-1. Reject unless `INGEST_API_KEY` is set (503) and matches `X-API-Key` (401). CORS
-   headers for the dashboard origin.
+1. Reject without a valid Supabase Auth access token (401), or when the user's email is
+   not in `ingest_admin` (403, naming the address). Gateway JWT verification is off
+   (`supabase/config.toml`) so the function can answer with these messages itself.
 2. Enforce `MAX_UPLOAD_MB` (default 20; 413 above it). Large initial loads use the
    Python loader.
 3. Parse and validate the CSV with `supabase/functions/_shared/validate.ts`, a port of
@@ -136,7 +140,7 @@ Deno/TypeScript. Replaces `POST /api/ingest` and `POST /api/ingest/validate`.
    The chunk function is today's `INSERT_FROM_STAGING` (identity join on
    municipality + province, `ON CONFLICT DO NOTHING`); finish computes unmatched
    municipalities/countries for the batch, writes rejections and the batch totals.
-   These three functions are `GRANT`ed to `service_role` only.
+   These three functions, and `is_ingest_admin`, are `GRANT`ed to `service_role` only.
 
 Because inserts are idempotent on the natural key, a failure partway is fixed by
 uploading the same file again — the same guarantee the CLI loader gives.
@@ -173,8 +177,8 @@ FastAPI, uvicorn and python-multipart are dropped from dependencies; `psycopg` a
 3. From a PC: simplify geometry locally and `pg_restore` (PDF storage section), or
    run `python -m app.etl` against the session-pooler URL. Free tier is 500 MB; the
    simplified database is ~210 MB, the unsimplified one does not fit.
-4. `supabase functions deploy ingest`; `supabase secrets set INGEST_API_KEY=…` only
-   when uploads should be on.
+4. `supabase functions deploy ingest`; add the Vercel URL to Auth → Redirect URLs;
+   `INSERT INTO ingest_admin (email) VALUES (…)` for each uploader.
 5. Vercel: root `frontend`, env `VITE_SUPABASE_URL` + `VITE_SUPABASE_PUBLISHABLE_KEY`.
    Delete the separate API project.
 
@@ -182,7 +186,7 @@ Free-tier note: Supabase pauses free projects after 7 days without activity.
 
 ## Out of scope
 
-Per-user login/SSO, changes to the dashboard's UI or metrics, a new geometry pipeline.
+SSO for reading the dashboard, changes to the dashboard's UI or metrics, a new geometry pipeline.
 
 ## Risks
 

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api, type Filters } from "./lib/api";
 import { filtersFromSearch, searchFromFilters, activeFilterCount } from "./lib/urlState";
+import { isConfigured } from "./lib/supabase";
 import { BarList } from "./components/BarList";
 import { FilterBar } from "./components/FilterBar";
 import type { Level } from "./components/MapPanel";
@@ -130,10 +131,15 @@ export default function App() {
         }}
       />
 
-      {summary.isError ? (
+      {!isConfigured ? (
         <p className="mt-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-surface)] p-4 text-sm">
-          The API is unreachable. Check that the backend is running and that{" "}
-          <code>VITE_API_URL</code> points at it.
+          This build has no database connection. Set <code>VITE_SUPABASE_URL</code> and{" "}
+          <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>, then rebuild.
+        </p>
+      ) : summary.isError ? (
+        <p className="mt-4 rounded-xl border border-[var(--color-hairline)] bg-[var(--color-surface)] p-4 text-sm">
+          The data could not be loaded: {summary.error.message}. If the Supabase project
+          was paused for inactivity, restore it from the Supabase dashboard.
         </p>
       ) : null}
 

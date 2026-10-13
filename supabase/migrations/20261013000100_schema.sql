@@ -10,6 +10,10 @@
 --   * Two metrics are exposed separately and never conflated:
 --       headcount           = COUNT(DISTINCT student_ref)
 --       enrollment_records  = COUNT(*)
+--   * Every table has Row Level Security on and no policies. On Supabase that means
+--     the browser's publishable key cannot read or write any table through the Data
+--     API; it can only call the functions in the read_api migration, which return
+--     aggregates. The loader connects as the table owner, which RLS does not restrict.
 
 CREATE EXTENSION IF NOT EXISTS postgis;
 
@@ -163,3 +167,17 @@ FROM boundary b
 LEFT JOIN enrollment e ON e.province_id = b.id
 WHERE b.level = 'province'
 GROUP BY b.id, b.name;
+
+-- ---------------------------------------------------------------- access
+
+ALTER TABLE boundary         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE enrollment       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ingest_batch     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ingest_rejection ENABLE ROW LEVEL SECURITY;
+
+-- The read models would otherwise run with their owner's rights and skip RLS.
+ALTER VIEW v_enrollment_geo      SET (security_invoker = true);
+ALTER VIEW v_municipality_totals SET (security_invoker = true);
+ALTER VIEW v_province_totals     SET (security_invoker = true);
+REVOKE ALL ON v_enrollment_geo, v_municipality_totals, v_province_totals
+    FROM anon, authenticated;

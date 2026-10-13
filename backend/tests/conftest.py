@@ -15,10 +15,9 @@ from pathlib import Path
 
 import psycopg
 import pytest
-from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
-from app.config import get_settings
 from app.db import apply_schema
 
 ADMIN_URL = os.environ.get(
@@ -189,16 +188,26 @@ def loaded(conn, boundary_files, sample_csv, database_url):
 
 
 @pytest.fixture()
-def client(loaded, database_url, monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", database_url)
-    monkeypatch.setenv("INGEST_API_KEY", "test-key")
-    get_settings.cache_clear()
-    from app import db as db_module
+def call(loaded, conn):
+    """Call one of the dashboard's database functions and return its value.
 
-    db_module.close_pool()
-    from app.main import create_app
+    Arguments are passed through as parameters; dicts and lists become jsonb. Errors roll back so
+    the next call starts clean, and surface as psycopg exceptions with their SQLSTATE.
+    """
 
-    with TestClient(create_app()) as test_client:
-        yield test_client
-    db_module.close_pool()
-    get_settings.cache_clear()
+    def _call(name: str, *args):
+        placeholders = ", ".join(
+            "%s::jsonb" if isinstance(a, (dict, list)) else "%s" for a in args
+        )
+        params = [Jsonb(a) if isinstance(a, (dict, list)) else a for a in args]
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT {name}({placeholders}) AS v", params)
+                value = cur.fetchone()["v"]
+            conn.commit()
+            return value
+        except psycopg.Error:
+            conn.rollback()
+            raise
+
+    return _call

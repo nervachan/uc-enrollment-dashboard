@@ -5,29 +5,22 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "uc-enrollment-dashboard-api"
 version = "1.0.0"
-description = "API for the UC enrollment geography dashboard"
+description = "Data loader for the UC enrollment geography dashboard (boundaries and CSV extracts into Supabase)"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115",
-    "uvicorn[standard]>=0.30",
-    "psycopg[binary,pool]>=3.2",
+    "psycopg[binary]>=3.2",
     "pydantic-settings>=2.4",
-    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [dependency-groups]
 # Same set as the dev extra, for `uv sync`. Hosts that run `uv sync --no-dev` skip it.
-dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.6"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
-
-[tool.setuptools.package-data]
-# The schema script is read at runtime; without this a non-editable install drops it.
-app = ["sql/*.sql"]
 
 [tool.ruff]
 line-length = 100
