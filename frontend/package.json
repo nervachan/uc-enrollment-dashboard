@@ -1,6 +1,9 @@
 {
   "name": "uc-enrollment-dashboard-frontend",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -1,19 +1,28 @@
+# Generated from uv.lock: uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
+# Edit pyproject.toml, run `uv lock`, then regenerate. Do not edit by hand.
+annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
-certifi==2026.7.22
 click==8.5.0
 fastapi==0.143.0
 h11==0.16.0
 httptools==0.9.0
 idna==3.20
+opentelemetry-api==1.45.1
 psycopg==3.3.6
-psycopg-binary==3.3.6
+psycopg-binary==3.3.6 ; implementation_name != 'pypy'
 psycopg-pool==3.3.3
 pydantic==2.14.1
+pydantic-core==2.50.1
 pydantic-settings==2.15.0
+python-dotenv==1.2.4
 python-multipart==0.0.32
+pyyaml==6.0.3
 starlette==1.7.0
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+tzdata==2026.5 ; sys_platform == 'win32'
 uvicorn==0.54.0
-uvloop==0.23.0; sys_platform != "win32"
+uvloop==0.23.0 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
 watchfiles==1.3.0
 websockets==17.2
