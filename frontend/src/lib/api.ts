@@ -53,10 +53,10 @@ export function tileUrl(level: string, filters: Filters): string {
   return `${SUPABASE_URL}/rest/v1/rpc/tile?level=${encodeURIComponent(level)}&z={z}&x={x}&y={y}&f=${f}`;
 }
 
-/** Headers a tile request needs: the project key, and raw bytes rather than JSON. */
+/** Headers a tile request needs: the project key, and the tile media type rather than JSON. */
 export function tileRequestHeaders(url: string): Record<string, string> | undefined {
   if (!SUPABASE_URL || !url.startsWith(`${SUPABASE_URL}/rest/v1/rpc/tile`)) return undefined;
-  return { apikey: SUPABASE_KEY, Accept: "application/octet-stream" };
+  return { apikey: SUPABASE_KEY, Accept: "application/vnd.mapbox-vector-tile" };
 }
 
 export interface Totals {

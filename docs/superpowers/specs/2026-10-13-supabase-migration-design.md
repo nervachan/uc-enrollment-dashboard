@@ -89,9 +89,11 @@ limits) become `RAISE EXCEPTION` with the same messages.
 
 **Tiles.** MapLibre requests
 `{SUPABASE_URL}/rest/v1/rpc/tile?level=…&z={z}&x={x}&y={y}&f=<urlencoded json>` with
-`Accept: application/octet-stream` and the `apikey` header added via MapLibre's
-`transformRequest`. PostgREST returns a function's `bytea` result raw for that
-`Accept` type.
+`Accept: application/vnd.mapbox-vector-tile` and the `apikey` header added via
+MapLibre's `transformRequest`. `tile` returns the domain
+`"application/vnd.mapbox-vector-tile"` (over `bytea`), which PostgREST treats as a media
+type handler and sends as raw bytes. (Found in deployment: a plain `bytea` result is
+refused with 406 by current Supabase; fixed in `…_tile_media_type.sql`.)
 
 **Scale fallback.** The "quantiles are degenerate → use log breaks" logic
 (`_quantiles_are_degenerate`, `_log_breaks`) moves to `frontend/src/lib/scale.ts`, a

@@ -36,11 +36,11 @@ describe("tiles", () => {
     expect(JSON.parse(f!)).toEqual({ college: ["CITCS"], metric: "headcount" });
   });
 
-  it("adds the project key and asks for raw bytes on tile requests only", () => {
+  it("adds the project key and asks for the tile media type on tile requests only", () => {
     const url = tileUrl("municipality", EMPTY_FILTERS).replace("{z}/{x}/{y}", "7/106/58");
     expect(tileRequestHeaders(url)).toEqual({
       apikey: "sb_publishable_test",
-      Accept: "application/octet-stream",
+      Accept: "application/vnd.mapbox-vector-tile",
     });
     expect(tileRequestHeaders("https://elsewhere.example/glyphs/0-255.pbf")).toBeUndefined();
   });
