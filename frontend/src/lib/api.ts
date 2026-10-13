@@ -1,7 +1,14 @@
-/** Typed access to the dashboard API. */
+/**
+ * Typed access to the dashboard's data, all of it served by Supabase: reads are database
+ * functions (supabase/migrations/*_read_api.sql) called through supabase-js, map tiles
+ * are fetched by MapLibre from the `tile` function, and uploads go to the `ingest` Edge
+ * Function. Components only ever see the `api` object and these types.
+ */
 
-// Trailing slashes stripped, so "https://api.example.com/" does not produce "//api/...".
-export const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/+$/, "");
+import { finaliseScale, type RawScale, type Scale } from "./scale";
+import { SUPABASE_KEY, SUPABASE_URL, supabase } from "./supabase";
+
+export type { Scale } from "./scale";
 
 export type Metric = "headcount" | "records";
 
@@ -26,32 +33,30 @@ export const EMPTY_FILTERS: Filters = {
   metric: "headcount",
 };
 
-/** Build the query string. Repeated keys, so the API's `= ANY(...)` sees a real list. */
-export function toSearchParams(filters: Filters): URLSearchParams {
-  const params = new URLSearchParams();
+/** The `f` argument every read function takes: set filters only, empty lists dropped. */
+export function filterArg(filters: Filters): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined || value === null || value === "") continue;
-    if (Array.isArray(value)) {
-      for (const item of value) params.append(key, String(item));
-    } else {
-      params.set(key, String(value));
-    }
+    if (Array.isArray(value) && value.length === 0) continue;
+    out[key] = value;
   }
-  return params;
+  return out;
 }
 
-export function apiUrl(path: string, filters?: Filters): string {
-  const query = filters ? toSearchParams(filters).toString() : "";
-  return `${API_BASE}${path}${query ? `?${query}` : ""}`;
+/**
+ * Vector tile URL template for MapLibre. The {z}/{x}/{y} placeholders stay literal for
+ * MapLibre to fill; the request needs the headers from tileRequestHeaders().
+ */
+export function tileUrl(level: string, filters: Filters): string {
+  const f = encodeURIComponent(JSON.stringify(filterArg(filters)));
+  return `${SUPABASE_URL}/rest/v1/rpc/tile?level=${encodeURIComponent(level)}&z={z}&x={x}&y={y}&f=${f}`;
 }
 
-async function getJson<T>(path: string, filters?: Filters): Promise<T> {
-  const response = await fetch(apiUrl(path, filters));
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`${response.status} ${path}: ${detail.slice(0, 200)}`);
-  }
-  return (await response.json()) as T;
+/** Headers a tile request needs: the project key, and the tile media type rather than JSON. */
+export function tileRequestHeaders(url: string): Record<string, string> | undefined {
+  if (!SUPABASE_URL || !url.startsWith(`${SUPABASE_URL}/rest/v1/rpc/tile`)) return undefined;
+  return { apikey: SUPABASE_KEY, Accept: "application/vnd.mapbox-vector-tile" };
 }
 
 export interface Totals {
@@ -82,16 +87,6 @@ export interface FilterOptions {
   region: string[];
   nationality: string[];
   courses_by_college: { college: string; course: string; records: number }[];
-}
-
-export interface Scale {
-  level: string;
-  metric: Metric;
-  min: number;
-  max: number;
-  breaks: number[];
-  /** How the class breaks were chosen. Quantiles unless one boundary dominates. */
-  method: "quantile" | "logarithmic";
 }
 
 export interface BoundaryFeature {
@@ -134,7 +129,7 @@ export interface Batch {
   note: string | null;
 }
 
-/** Thrown with the API's own message, so the upload panel can show why it refused. */
+/** Thrown with the server's own message, so the panels can show why it refused. */
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -145,12 +140,27 @@ export class ApiError extends Error {
   }
 }
 
-async function postFile<T>(path: string, file: File, apiKey: string, note?: string): Promise<T> {
+async function rpc<T>(fn: string, args?: Record<string, unknown>): Promise<T> {
+  const { data, error, status } = await supabase.rpc(fn, args);
+  if (error) throw new ApiError(status, error.message);
+  return data as T;
+}
+
+async function postUpload<T>(file: File, dryRun: boolean): Promise<T> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new ApiError(401, "sign in to upload");
+
   const body = new FormData();
   body.append("file", file);
-  const headers: Record<string, string> = { "X-API-Key": apiKey };
-  if (note) headers["note"] = note;
-  const response = await fetch(`${API_BASE}${path}`, { method: "POST", body, headers });
+  const response = await fetch(
+    `${SUPABASE_URL}/functions/v1/ingest${dryRun ? "?dry_run=1" : ""}`,
+    {
+      method: "POST",
+      body,
+      headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_KEY },
+    },
+  );
   const text = await response.text();
   if (!response.ok) {
     let detail = text.slice(0, 300);
@@ -165,27 +175,24 @@ async function postFile<T>(path: string, file: File, apiKey: string, note?: stri
 }
 
 export const api = {
-  health: () => getJson<{ status: string; enrollment_rows: number }>("/api/health"),
-  filters: () => getJson<FilterOptions>("/api/filters"),
-  summary: (filters: Filters) => getJson<Summary>("/api/summary", filters),
-  scale: (level: string, filters: Filters) => getJson<Scale>(`/api/scale/${level}`, filters),
+  health: () => rpc<{ status: string; enrollment_rows: number }>("health"),
+  filters: () => rpc<FilterOptions>("filter_options"),
+  summary: (filters: Filters) => rpc<Summary>("summary", { f: filterArg(filters) }),
+  scale: async (level: string, filters: Filters): Promise<Scale> =>
+    finaliseScale(await rpc<RawScale>("scale", { level, f: filterArg(filters) })),
   geo: (level: string, filters: Filters) =>
-    getJson<{ features: BoundaryFeature[] }>(`/api/geo/${level}`, filters),
-  bbox: (level: string, name: string, province?: string) => {
-    const params = new URLSearchParams({ name });
-    if (province) params.set("province", province);
-    return getJson<{ minx: number; miny: number; maxx: number; maxy: number }>(
-      `/api/geo/bbox/${level}?${params.toString()}`,
-    );
-  },
+    rpc<{ features: BoundaryFeature[] }>("geo", { level, f: filterArg(filters) }),
+  bbox: (level: string, name: string, province?: string) =>
+    rpc<{ minx: number; miny: number; maxx: number; maxy: number }>("bbox", {
+      level,
+      name,
+      ...(province ? { province } : {}),
+    }),
   feederSchools: (filters: Filters) =>
-    getJson<{ school: string; province: string; headcount: number }[]>(
-      "/api/feeder-schools",
-      filters,
-    ),
-  batches: () => getJson<Batch[]>("/api/batches"),
-  validateUpload: (file: File, apiKey: string) =>
-    postFile<ValidationResult>("/api/ingest/validate", file, apiKey),
-  ingestUpload: (file: File, apiKey: string, note?: string) =>
-    postFile<IngestResult>("/api/ingest", file, apiKey, note),
+    rpc<{ school: string; province: string; headcount: number }[]>("feeder_schools", {
+      f: filterArg(filters),
+    }),
+  batches: () => rpc<Batch[]>("batches"),
+  validateUpload: (file: File) => postUpload<ValidationResult>(file, true),
+  ingestUpload: (file: File) => postUpload<IngestResult>(file, false),
 };

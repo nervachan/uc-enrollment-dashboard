@@ -19,3 +19,7 @@ dist/
 
 # Test output
 coverage/
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
